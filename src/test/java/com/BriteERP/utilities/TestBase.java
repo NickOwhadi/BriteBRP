@@ -2,97 +2,112 @@ package com.BriteERP.utilities;
 
 import com.aventstack.extentreports.ExtentReports;
 import com.aventstack.extentreports.ExtentTest;
+import com.aventstack.extentreports.Status;
+import com.aventstack.extentreports.markuputils.ExtentColor;
+import com.aventstack.extentreports.markuputils.MarkupHelper;
 import com.aventstack.extentreports.reporter.ExtentHtmlReporter;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.testng.ITestResult;
-import org.testng.annotations.AfterMethod;
-import org.testng.annotations.AfterTest;
-import org.testng.annotations.BeforeMethod;
-import org.testng.annotations.BeforeTest;
+import org.testng.annotations.*;
+import org.testng.asserts.SoftAssert;
 
 import java.io.IOException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.TimeUnit;
 
 public class TestBase {
+    //should be public/protected !!!!
     protected WebDriver driver;
-    protected Actions actions;
-    protected WebDriverWait wait;
+    protected Pages pages;
+    protected SoftAssert softAssert;
+    protected static ExtentReports report;
+    protected static ExtentHtmlReporter htmlReporter;
+    protected static ExtentTest extentLogger;
+    private static final Logger logger = LogManager.getLogger();
 
 
-    protected ExtentReports report;
-    protected ExtentHtmlReporter htmlReporter;
-    protected ExtentTest extentLogger;
-
-
-    @BeforeTest
-    public void setUpTest() {
+    @BeforeSuite(alwaysRun = true)
+    @Parameters("test")
+    public void setUpTest(@Optional String test) {
+        // actual reporter
         report = new ExtentReports();
-
-        String filePath = System.getProperty("user.dir") + "/test-output/report.html";
-        htmlReporter = new ExtentHtmlReporter(filePath);
-        report.attachReporter(htmlReporter);
-
-        htmlReporter.config().setReportName("BriteBRP automated test reports");
-
-        report.setSystemInfo("Environment", "QA3");
-        report.setSystemInfo("OS", System.getProperty("os.name"));
-        report.setSystemInfo("Browser", ConfigurationReader.get("browser"));
-        report.setSystemInfo("Testing Engineer", "Nick Owhadi");
-    }
-
-    @AfterTest
-    public void tearDownTest() {
-        report.flush();
-    }
-
-
-    @BeforeMethod
-    public void setUpMethod() throws InterruptedException {
-        // initilializes the webdriver object in test base class using the Driver utility
-        driver = Driver.get();
-
-        // setting implicit wait --> when elements not found, it will keep trying to find it for 10 seconds
-//        driver.manage().timeouts().implicitlyWait(10, TimeUnit.SECONDS);
-
-        // set up the explicit wait object.
-        wait = new WebDriverWait(driver, 10);
-
-        // Actions class enable advanced interactions like double click, drag drop ...
-        actions = new Actions(driver);
-
-        // initilializes the webdriver object in test base class using the Driver utility
-        driver = Driver.get();
-
-        // setting implicit wait --> when elements not found, it will keep trying to find it for 10 seconds
-//        driver.manage().timeouts().implicitlyWait(10, TimeUnit.SECONDS);
-
-        // set up the explicit wait object.
-        wait = new WebDriverWait(driver, 10);
-
-        // Actions class enable advanced interactions like double click, drag drop ...
-        actions = new Actions(driver);
-
-
-    }
-
-    @AfterMethod
-    public void tearDownMethod(ITestResult result) throws InterruptedException, IOException {
-        // if the test failed
-        if (result.getStatus() == ITestResult.FAILURE) {
-            // record the failed test
-            extentLogger.fail(result.getName());
-            // take screen shot and add to report0
-            String screenshotLocation = BrowserUtils.getScreenshot(result.getName());
-            extentLogger.addScreenCaptureFromPath(screenshotLocation);
-            // capture the exception
-            extentLogger.fail(result.getThrowable());
-        } else if (result.getStatus() == ITestResult.SKIP) {
-            extentLogger.skip("Test case skipper: " + result.getName());
+        // System.getProperty("user.dir") ---> get the path to current project
+        // test-output --> folder in the current project, will be created by testng if
+        // it does not already exist
+        // report.html --> name of the report file
+        if (test == null) {
+            test = "reports";
         }
+        String filePath = System.getProperty("user.dir") + "/test-output/" + test + "/" + LocalDate.now().format(DateTimeFormatter.ofPattern("MM_dd_yyyy")) + "/report.html";
+        htmlReporter = new ExtentHtmlReporter(filePath);
+        logger.info("Report path: "+filePath);
+        report.attachReporter(htmlReporter);
+        report.setSystemInfo("ENV", "qa");
+        report.setSystemInfo("ENV", "qa");
+        report.setSystemInfo("browser", ConfigurationReader.getProperty("browser"));
+        report.setSystemInfo("OS", System.getProperty("os.name"));
+        htmlReporter.config().setDocumentTitle("BriteBRP Test automation");
+        htmlReporter.config().setReportName("BriteBRP Test automation");
+        if (System.getenv("runner") != null) {
+            extentLogger.info("Running: " + System.getenv("runner"));
+        }
+    }
 
-        Thread.sleep(4000);
+
+    @BeforeMethod(alwaysRun = true)
+    @Parameters("browser")
+    public void setup(@Optional String browser) {
+        driver = Driver.getDriver(browser);
+        pages = new Pages();
+        softAssert = new SoftAssert();
+        driver.manage().timeouts().implicitlyWait(Long.valueOf(ConfigurationReader.getProperty("implicitwait")), TimeUnit.SECONDS);
+        driver.manage().window().maximize();
+        String URL = ConfigurationReader.getProperty("url"+ConfigurationReader.getProperty("environment"));
+        driver.get(URL);
+        logger.info("URL: "+URL);
+    }
+
+    @AfterMethod(alwaysRun = true)
+    @Parameters("browser")
+    public void teardown(@Optional String browser, ITestResult result) throws IOException {
+        // checking if the test method failed
+        if (result.getStatus() == ITestResult.FAILURE) {
+            // get screenshot using the utility method and save the location of the screenshot
+            String screenshotLocation = BrowserUtils.getScreenshot(result.getName());
+
+            // capture the name of test method
+            extentLogger.fail(result.getName());
+
+            // add the screenshot to the report
+            try {
+                extentLogger.addScreenCaptureFromPath(screenshotLocation);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            // capture the exception thrown
+            extentLogger.fail(result.getThrowable());
+
+        } else if (result.getStatus() == ITestResult.SUCCESS) {
+            extentLogger.log(Status.PASS, MarkupHelper.createLabel(result.getName() + " PASSED ", ExtentColor.GREEN));
+        } else if (result.getStatus() == ITestResult.SKIP) {
+            extentLogger.skip("Test Case Skipped is " + result.getName());
+        }
+        if(browser == null){
+            browser = ConfigurationReader.getProperty("browser");
+        }
+        extentLogger.log(Status.INFO, MarkupHelper.createLabel("Browser: "+browser, ExtentColor.ORANGE));
+        softAssert.assertAll();
         Driver.closeDriver();
     }
 
+    @AfterSuite(alwaysRun = true)
+    public void tearDownTest() {
+        logger.info(":: FLUSHING REPORT ::");
+        report.flush();
+    }
 }

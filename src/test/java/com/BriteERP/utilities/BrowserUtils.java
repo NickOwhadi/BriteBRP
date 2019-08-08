@@ -1,6 +1,8 @@
 package com.BriteERP.utilities;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.openqa.selenium.*;
 import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.ui.ExpectedCondition;
@@ -11,6 +13,8 @@ import org.testng.Assert;
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -19,36 +23,132 @@ import static org.testng.AssertJUnit.assertFalse;
 import static org.testng.AssertJUnit.assertTrue;
 
 public class BrowserUtils {
-    /*
-     * takes screenshot
-     * @param name
-     * take a name of a test and returns a path to screenshot takes
+    private static final Logger logger = LogManager.getLogger();
+
+    /**
+     * @param expectedResult
+     * @param actualResult   Verifies if two strings are equals.
      */
-    public static String getScreenshot(String name) throws IOException {
-        // name the screenshot with the current date time to avoid duplicate name
-        String date = new SimpleDateFormat("yyyyMMddhhmmss").format(new Date());
-        // TakesScreenshot ---> interface from selenium which takes screenshots
-        TakesScreenshot ts = (TakesScreenshot) Driver.get();
-        File source = ts.getScreenshotAs(OutputType.FILE);
-        // full path to the screenshot location
-        String target = System.getProperty("user.dir") + "/test-output/Screenshots/" + name + date + ".png";
-        File finalDestination = new File(target);
-        // save the screenshot to the path given
-        FileUtils.copyFile(source, finalDestination);
-        return target;
+    public static void verifyEquals(String expectedResult, String actualResult) {
+        if (expectedResult.equals(actualResult)) {
+            System.out.println("Passed");
+        } else {
+            System.out.println("Failed");
+            System.out.println("Expected result: " + expectedResult);
+            System.out.println("Actual result: " + actualResult);
+        }
     }
+
+    /**
+     * This method will put on pause execution
+     *
+     * @param seconds
+     */
+    public static void waitPlease(int seconds) {
+        try {
+            Thread.sleep(seconds * 1000);
+        } catch (Exception e) {
+            logger.error(e);
+            System.out.println(e.getMessage());
+        }
+
+    }
+
+    /**
+     * @param page
+     * @param driver This method will open example page based on link name
+     */
+    public static void openPage(String page, WebDriver driver) {
+        //we will find all examples on the home page
+        List<WebElement> listOfExamples = driver.findElements(By.tagName("a"));
+        for (WebElement example : listOfExamples) {
+            if (example.getText().contains(page)) {
+                example.click();
+                break;
+            }
+        }
+    }
+
+    public static void verifyIsDisplayed(WebElement element) {
+        if (element.isDisplayed()) {
+            System.out.println("PASSED");
+            System.out.println(element.getText() + ": is visible");
+        } else {
+            System.out.println("FAILED");
+            System.out.println(element.getText() + ": is not visible!");
+        }
+    }
+
+    /**
+     * This method will recover in case of exception after unsuccessful the click,
+     * and will try to click on element again.
+     *
+     * @param driver
+     * @param by
+     * @param attempts
+     */
+    public static void clickWithWait(WebDriver driver, By by, int attempts) {
+        int counter = 0;
+        //click on element as many as you specified in attempts parameter
+        while (counter < attempts) {
+            try {
+                //selenium must look for element again
+                driver.findElement(by).click();
+                //if click is successful - then break
+                break;
+            } catch (WebDriverException e) {
+                //if click failed
+                //print exception
+                logger.error(e);
+                //print attempt
+                logger.error("Attempt :: " + ++counter);
+                //wait for 1 second, and try to click again
+                waitPlease(1);
+            }
+        }
+    }
+
+    /**
+     * This method will recover in case of exception after unsuccessful the click,
+     * and will try to click on element again.
+     *
+     * @param by
+     * @param attempts
+     */
+    public static void clickWithWait(By by, int attempts) {
+        int counter = 0;
+        //click on element as many as you specified in attempts parameter
+        while (counter < attempts) {
+            try {
+                //selenium must look for element again
+                clickWithJS(Driver.getDriver().findElement(by));
+                //if click is successful - then break
+                break;
+            } catch (WebDriverException e) {
+                //if click failed
+                //print exception
+                logger.error(e);
+                //print attempt
+                logger.error("Attempt :: " + ++counter);
+                //wait for 1 second, and try to click again
+                waitPlease(1);
+            }
+        }
+    }
+
+
     /*
      * switches to new window by the exact title
      */
     public static void switchToWindow(String targetTitle) {
-        String origin = Driver.get().getWindowHandle();
-        for (String handle : Driver.get().getWindowHandles()) {
-            Driver.get().switchTo().window(handle);
-            if (Driver.get().getTitle().equals(targetTitle)) {
+        String origin = Driver.getDriver().getWindowHandle();
+        for (String handle : Driver.getDriver().getWindowHandles()) {
+            Driver.getDriver().switchTo().window(handle);
+            if (Driver.getDriver().getTitle().equals(targetTitle)) {
                 return;
             }
         }
-        Driver.get().switchTo().window(origin);
+        Driver.getDriver().switchTo().window(origin);
     }
 
     /**
@@ -57,7 +157,7 @@ public class BrowserUtils {
      * @param element on which to hover
      */
     public static void hover(WebElement element) {
-        Actions actions = new Actions(Driver.get());
+        Actions actions = new Actions(Driver.getDriver());
         actions.moveToElement(element).perform();
     }
 
@@ -85,10 +185,8 @@ public class BrowserUtils {
      * @return list of strings
      */
     public static List<String> getElementsText(By locator) {
-
-        List<WebElement> elems = Driver.get().findElements(locator);
+        List<WebElement> elems = Driver.getDriver().findElements(locator);
         List<String> elemTexts = new ArrayList<>();
-
         for (WebElement el : elems) {
             if (!el.getText().isEmpty()) {
                 elemTexts.add(el.getText());
@@ -118,7 +216,7 @@ public class BrowserUtils {
      * @return
      */
     public static WebElement waitForVisibility(WebElement element, int timeToWaitInSec) {
-        WebDriverWait wait = new WebDriverWait(Driver.get(), timeToWaitInSec);
+        WebDriverWait wait = new WebDriverWait(Driver.getDriver(), timeToWaitInSec);
         return wait.until(ExpectedConditions.visibilityOf(element));
     }
 
@@ -130,7 +228,7 @@ public class BrowserUtils {
      * @return
      */
     public static WebElement waitForVisibility(By locator, int timeout) {
-        WebDriverWait wait = new WebDriverWait(Driver.get(), timeout);
+        WebDriverWait wait = new WebDriverWait(Driver.getDriver(), timeout);
         return wait.until(ExpectedConditions.visibilityOfElementLocated(locator));
     }
 
@@ -142,7 +240,7 @@ public class BrowserUtils {
      * @return
      */
     public static WebElement waitForClickablility(WebElement element, int timeout) {
-        WebDriverWait wait = new WebDriverWait(Driver.get(), timeout);
+        WebDriverWait wait = new WebDriverWait(Driver.getDriver(), timeout);
         return wait.until(ExpectedConditions.elementToBeClickable(element));
     }
 
@@ -154,7 +252,7 @@ public class BrowserUtils {
      * @return
      */
     public static WebElement waitForClickablility(By locator, int timeout) {
-        WebDriverWait wait = new WebDriverWait(Driver.get(), timeout);
+        WebDriverWait wait = new WebDriverWait(Driver.getDriver(), timeout);
         return wait.until(ExpectedConditions.elementToBeClickable(locator));
     }
 
@@ -170,7 +268,7 @@ public class BrowserUtils {
             }
         };
         try {
-            WebDriverWait wait = new WebDriverWait(Driver.get(), timeOutInSeconds);
+            WebDriverWait wait = new WebDriverWait(Driver.getDriver(), timeOutInSeconds);
             wait.until(expectation);
         } catch (Throwable error) {
             error.printStackTrace();
@@ -185,11 +283,11 @@ public class BrowserUtils {
      */
     public static void verifyElementDisplayed(By by) {
         try {
-            assertTrue("Element not visible: " + by, Driver.get().findElement(by).isDisplayed());
+            assertTrue("Element not visible: " + by, Driver.getDriver().findElement(by).isDisplayed());
         } catch (NoSuchElementException e) {
+            logger.error(e);
             e.printStackTrace();
             Assert.fail("Element not found: " + by);
-
         }
     }
 
@@ -201,13 +299,12 @@ public class BrowserUtils {
      */
     public static void verifyElementNotDisplayed(By by) {
         try {
-            assertFalse("Element should not be visible: " + by, Driver.get().findElement(by).isDisplayed());
+            Assert.assertFalse(Driver.getDriver().findElement(by).isDisplayed(), "Element should not be visible: " + by);
         } catch (NoSuchElementException e) {
+            logger.error(e);
             e.printStackTrace();
-
         }
     }
-
 
     /**
      * Verifies whether the element is displayed on page
@@ -220,42 +317,33 @@ public class BrowserUtils {
             assertTrue("Element not visible: " + element, element.isDisplayed());
         } catch (NoSuchElementException e) {
             e.printStackTrace();
+            logger.error(":::Element not found:::");
             Assert.fail("Element not found: " + element);
-
         }
     }
-
 
     /**
      * Waits for element to be not stale
      *
      * @param element
      */
-    public void waitForStaleElement(WebElement element) {
+    public static void waitForStaleElement(WebElement element) {
         int y = 0;
         while (y <= 15) {
-            if (y == 1)
+            try {
+                element.isDisplayed();
+                break;
+            } catch (StaleElementReferenceException st) {
+                y++;
                 try {
-                    element.isDisplayed();
-                    break;
-                } catch (StaleElementReferenceException st) {
-                    y++;
-                    try {
-                        Thread.sleep(300);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                } catch (WebDriverException we) {
-                    y++;
-                    try {
-                        Thread.sleep(300);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
+            }
+            break;
         }
     }
-
 
     /**
      * Clicks on an element using JavaScript
@@ -263,10 +351,9 @@ public class BrowserUtils {
      * @param element
      */
     public static void clickWithJS(WebElement element) {
-        ((JavascriptExecutor) Driver.get()).executeScript("arguments[0].scrollIntoView(true);", element);
-        ((JavascriptExecutor) Driver.get()).executeScript("arguments[0].click();", element);
+        ((JavascriptExecutor) Driver.getDriver()).executeScript("arguments[0].scrollIntoView(true);", element);
+        ((JavascriptExecutor) Driver.getDriver()).executeScript("arguments[0].click();", element);
     }
-
 
     /**
      * Scrolls down to an element using JavaScript
@@ -274,7 +361,7 @@ public class BrowserUtils {
      * @param element
      */
     public static void scrollToElement(WebElement element) {
-        ((JavascriptExecutor) Driver.get()).executeScript("arguments[0].scrollIntoView(true);", element);
+        ((JavascriptExecutor) Driver.getDriver()).executeScript("arguments[0].scrollIntoView(true);", element);
     }
 
     /**
@@ -283,7 +370,7 @@ public class BrowserUtils {
      * @param element
      */
     public static void doubleClick(WebElement element) {
-        new Actions(Driver.get()).doubleClick(element).build().perform();
+        new Actions(Driver.getDriver()).doubleClick(element).build().perform();
     }
 
     /**
@@ -294,17 +381,18 @@ public class BrowserUtils {
      * @param attributeValue
      */
     public static void setAttribute(WebElement element, String attributeName, String attributeValue) {
-        ((JavascriptExecutor) Driver.get()).executeScript("arguments[0].setAttribute(arguments[1], arguments[2]);", element, attributeName, attributeValue);
+        ((JavascriptExecutor) Driver.getDriver()).executeScript("arguments[0].setAttribute(arguments[1], arguments[2]);", element, attributeName, attributeValue);
     }
 
     /**
      * Highlighs an element by changing its background and border color
+     *
      * @param element
      */
     public static void highlight(WebElement element) {
-        ((JavascriptExecutor) Driver.get()).executeScript("arguments[0].setAttribute('style', 'background: yellow; border: 2px solid red;');", element);
+        ((JavascriptExecutor) Driver.getDriver()).executeScript("arguments[0].setAttribute('style', 'background: yellow; border: 2px solid red;');", element);
         waitFor(1);
-        ((JavascriptExecutor) Driver.get()).executeScript("arguments[0].removeAttribute('style', 'background: yellow; border: 2px solid red;');", element);
+        ((JavascriptExecutor) Driver.getDriver()).executeScript("arguments[0].removeAttribute('style', 'background: yellow; border: 2px solid red;');", element);
     }
 
     /**
@@ -335,7 +423,7 @@ public class BrowserUtils {
         for (int i = 0; i < timeout; i++) {
             try {
                 element.click();
-                return;
+                break;
             } catch (WebDriverException e) {
                 waitFor(1);
             }
@@ -348,9 +436,8 @@ public class BrowserUtils {
      * @param element
      */
     public static void executeJScommand(WebElement element, String command) {
-        JavascriptExecutor jse = (JavascriptExecutor) Driver.get();
+        JavascriptExecutor jse = (JavascriptExecutor) Driver.getDriver();
         jse.executeScript(command, element);
-
     }
 
     /**
@@ -359,9 +446,44 @@ public class BrowserUtils {
      * @param command
      */
     public static void executeJScommand(String command) {
-        JavascriptExecutor jse = (JavascriptExecutor) Driver.get();
+        JavascriptExecutor jse = (JavascriptExecutor) Driver.getDriver();
         jse.executeScript(command);
+    }
 
+    /*
+     * takes screenshot
+     * @param name
+     * take a name of a test and returns a path to screenshot takes
+     */
+    public static String getScreenshot(String name) {
+        // name the screenshot with the current date time to avoid duplicate name
+        String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_hh:mm:ss a"));
+
+        // TakesScreenshot ---> interface from selenium which takes screenshots
+        TakesScreenshot ts = (TakesScreenshot) Driver.getDriver();
+        File source = ts.getScreenshotAs(OutputType.FILE);
+        // full path to the screenshot location
+        String target = System.getProperty("user.dir") + "/test-output/Screenshots/" + name + date + ".png";
+
+        File finalDestination = new File(target);
+
+        // save the screenshot to the path given
+        try {
+            FileUtils.copyFile(source, finalDestination);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return target;
+    }
+
+
+    public static void waitForPresenceOfElement(By by, long time) {
+        new WebDriverWait(Driver.getDriver(), time).until(ExpectedConditions.presenceOfElementLocated(by));
+    }
+
+    public static void waitForsStaleness(By by) {
+        new WebDriverWait(Driver.getDriver(), Integer.valueOf(ConfigurationReader.getProperty("SHORT_WAIT"))).
+                until(ExpectedConditions.stalenessOf(Driver.getDriver().findElement(by)));
     }
 
 
